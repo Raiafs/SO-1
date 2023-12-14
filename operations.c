@@ -1,8 +1,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
+#include <string.h>
+#include <unistd.h>
 
 #include "eventlist.h"
+#include "constants.h"
 
 static struct EventList* event_list = NULL;
 static unsigned int state_access_delay_ms = 0;
@@ -156,7 +159,8 @@ int ems_reserve(unsigned int event_id, size_t num_seats, size_t* xs, size_t* ys)
   return 0;
 }
 
-int ems_show(unsigned int event_id) {
+int ems_show(unsigned int event_id, int file_out) {
+
   if (event_list == NULL) {
     fprintf(stderr, "EMS state must be initialized\n");
     return 1;
@@ -172,35 +176,57 @@ int ems_show(unsigned int event_id) {
   for (size_t i = 1; i <= event->rows; i++) {
     for (size_t j = 1; j <= event->cols; j++) {
       unsigned int* seat = get_seat_with_delay(event, seat_index(event, i, j));
-      printf("%u", *seat);
+
+      char *str = (char*) malloc(sizeof(*seat));
+
+      if (str == NULL) {
+        fprintf(stderr, "Memory allocation error\n");
+        return 1;
+      }
+
+      sprintf(str, "%u", *seat);
+      write(file_out, str, strlen(str));
 
       if (j < event->cols) {
-        printf(" ");
+        write(file_out, " ", strlen(" "));
       }
+      free(str);
     }
 
-    printf("\n");
+    write(file_out, "\n", strlen("\n"));
   }
 
   return 0;
 }
 
-int ems_list_events() {
+int ems_list_events(int file_out) {
+
   if (event_list == NULL) {
     fprintf(stderr, "EMS state must be initialized\n");
     return 1;
   }
 
   if (event_list->head == NULL) {
-    printf("No events\n");
+    write(file_out, MSG_NO_EVENTS, strlen(MSG_NO_EVENTS));
     return 0;
   }
 
   struct ListNode* current = event_list->head;
   while (current != NULL) {
-    printf("Event: ");
-    printf("%u\n", (current->event)->id);
+    size_t str_length = (size_t) snprintf(NULL, 0, "Event: %u\n", (current->event)->id) + 1;  
+    char* str = (char*) malloc(str_length);
+
+    if (str == NULL) {
+      fprintf(stderr, "Memory allocation error\n");
+      return 1;
+    }
+
+    sprintf(str, "Event: %u\n", (current->event)->id);
+    write(file_out, str, strlen(str));
+
     current = current->next;
+    
+    free(str);
   }
 
   return 0;
