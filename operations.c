@@ -200,7 +200,6 @@ int ems_show(unsigned int event_id, int file_out) {
 }
 
 int ems_list_events(int file_out) {
-  char *str = "Event: ";
 
   if (event_list == NULL) {
     fprintf(stderr, "EMS state must be initialized\n");
@@ -214,18 +213,20 @@ int ems_list_events(int file_out) {
 
   struct ListNode* current = event_list->head;
   while (current != NULL) {
-    char *value = (char*) malloc(sizeof((current->event)->id));
+    size_t str_length = (size_t) snprintf(NULL, 0, "Event: %u\n", (current->event)->id) + 1;  
+    char* str = (char*) malloc(str_length);
 
-    if (value == NULL) {
+    if (str == NULL) {
       fprintf(stderr, "Memory allocation error\n");
       return 1;
     }
 
-    sprintf(value, "%u\n", (current->event)->id);
-    strcat(str, value);
+    sprintf(str, "Event: %u\n", (current->event)->id);
     write(file_out, str, strlen(str));
+
     current = current->next;
-    free(value);
+    
+    free(str);
   }
 
   return 0;

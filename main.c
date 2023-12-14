@@ -123,9 +123,6 @@ int main(int argc, char *argv[]) {
                 return 1;
             }
 
-            write(file_out, file_path, strlen(file_path));
-            write(file_out, "\n", 1);
-
             enum Command cmd;
             while ((cmd = get_next(fd)) != EOC) {
                 unsigned int event_id, delay;
@@ -134,7 +131,7 @@ int main(int argc, char *argv[]) {
 
                 switch (cmd) {
                     case CMD_CREATE:
-                        write(file_out, MSG_CREATE, strlen(MSG_CREATE));
+                        //write(file_out, MSG_CREATE, strlen(MSG_CREATE));
 
                         if (parse_create(fd, &event_id, &num_rows, &num_columns) != 0) {
                             fprintf(stderr, "Invalid command. See HELP for usage\n");
@@ -148,7 +145,7 @@ int main(int argc, char *argv[]) {
                         break;
 
                     case CMD_RESERVE:
-                        write(file_out, MSG_RESERVE, strlen(MSG_RESERVE));
+                        //write(file_out, MSG_RESERVE, strlen(MSG_RESERVE));
 
                         num_coords = parse_reserve(fd, MAX_RESERVATION_SIZE, &event_id, xs, ys);
 
@@ -164,7 +161,7 @@ int main(int argc, char *argv[]) {
                         break;
 
                     case CMD_SHOW:
-                        write(file_out, MSG_SHOW, strlen(MSG_SHOW));
+                        //write(file_out, MSG_SHOW, strlen(MSG_SHOW));
 
                         if (parse_show(fd, &event_id) != 0) {
                             fprintf(stderr, "Invalid command. See HELP for usage\n");
@@ -191,7 +188,7 @@ int main(int argc, char *argv[]) {
                         }
 
                         if (delay > 0) {
-                            write(file_out, MSG_WAITING, strlen(MSG_WAITING));
+                            //write(file_out, MSG_WAITING, strlen(MSG_WAITING));
                             
                             ems_wait(delay);
                         }
@@ -219,20 +216,8 @@ int main(int argc, char *argv[]) {
                 }
             }
 
-            pid_t child_pid = getpid();
-            size_t str_length = (size_t) snprintf(NULL, 0, "Child process %d terminated\n", child_pid) + 1;
+            printf("Child process %d terminated\n", getpid());
 
-            char *msg_process_terminated = (char*) malloc(str_length);
-
-            if (msg_process_terminated == NULL) {
-                fprintf(stderr, "Memory allocation error\n");
-                return 1;
-            }
-
-            sprintf(msg_process_terminated, "Child process %d terminated\n", child_pid);
-            write(file_out, msg_process_terminated, strlen(msg_process_terminated));
-
-            free(msg_process_terminated);
             close(file_out);
             free(file_out_path);
             free(file_name);
