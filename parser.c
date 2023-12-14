@@ -1,11 +1,11 @@
 #include "parser.h"
-
 #include <limits.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
 #include "constants.h"
+
 
 static int read_uint(int fd, unsigned int *value, char *next) {
   char buf[16];
@@ -137,6 +137,7 @@ enum Command get_next(int fd) {
 
 int parse_create(int fd, unsigned int *event_id, size_t *num_rows, size_t *num_cols) {
   char ch;
+  
 
   if (read_uint(fd, event_id, &ch) != 0 || ch != ' ') {
     cleanup(fd);
@@ -243,17 +244,15 @@ int parse_wait(int fd, unsigned int *delay, unsigned int *thread_id) {
       cleanup(fd);
       return 0;
     }
-
     if (read_uint(fd, thread_id, &ch) != 0 || (ch != '\n' && ch != '\0')) {
       cleanup(fd);
       return -1;
     }
-
     return 1;
   } else if (ch == '\n' || ch == '\0') {
     return 0;
   } else {
-    cleanup(fd);
+    cleanup(fd);    
     return -1;
   }
 }
