@@ -255,15 +255,12 @@ int ems_show(unsigned int event_id, int fd_out) {
     return 1;
   }
 
-  printf("espera de locks no show\n");
   size_t x =1;
   for(; x<=event->cols; x++){
     size_t y =1;
     for(; y<=event->rows; y++)
     pthread_mutex_lock(get_lock_with_delay(event, seat_index(event, x, y)));
   }
-  printf("entered show.\n");
-
   for (size_t i = 1; i <= event->rows; i++) {
     for (size_t j = 1; j <= event->cols; j++) {
       unsigned int* seat = get_seat_with_delay(event, seat_index(event, i, j));

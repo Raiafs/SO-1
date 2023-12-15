@@ -52,11 +52,9 @@ void* handle_commands (void * args){
           continue;
         }
         if (curCmd%total_threads==thread_id && curCmd>=start_line){
-          printf("create entered\n");
           if (ems_create(event_id, num_rows, num_columns)) {
             fprintf(stderr, "Failed to create event\n");
           }
-          printf("finished create.\n");
         }
         
         break;
@@ -69,11 +67,9 @@ void* handle_commands (void * args){
           continue;
         }
         if (curCmd%total_threads==thread_id && curCmd>=start_line){
-          printf("reserve entered\n");
           if (ems_reserve(event_id, num_coords, xs, ys)) {
             fprintf(stderr, "Failed to reserve seats\n");
           }
-          printf("reserve finished\n");
         }
         
         break;
@@ -102,10 +98,10 @@ void* handle_commands (void * args){
       case CMD_WAIT:
           unsigned int target_thread_id;
           int has_thread_id = parse_wait(fd_in, &delay, &target_thread_id);
-          if (curCmd>=start_line){
+          if (curCmd>=start_line && parse_wait(fd_in, &delay, &target_thread_id)>0){
               if (has_thread_id == -1) {  
               fprintf(stderr, "Invalid command. See HELP for usage\n");
-            } else if (has_thread_id && (int)target_thread_id == thread_id && delay > 0){
+            } else if (has_thread_id && (int)target_thread_id == thread_id+1 && delay > 0){
               printf("Waiting...\n");
               ems_wait(delay);
             } else if (!has_thread_id && delay > 0){
@@ -292,7 +288,6 @@ int main(int argc, char *argv[]) {
             free(thread_result);
           }
           if (barrier ==1)
-            printf("encontrou barrier\n");
           free(args);
         }
         
