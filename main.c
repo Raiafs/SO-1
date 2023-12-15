@@ -1,5 +1,6 @@
 #include <limits.h>
 #include <stdio.h>
+#include <stdint.h>
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
@@ -27,40 +28,10 @@ void* handle_commands (void * args){
   int thread_id = cmdArgs->thread_id;
   int total_threads = cmdArgs->total_threads;
   int fd_out = cmdArgs->fd_out;
+  
   int curCmd = 0; // tem de se mudar para cenários de barrier, em q o 1o comando desta vez é o q vem depois do barrier
 
   while ((cmd = get_next(fd_in)) != EOC) {
-    if (curCmd%total_threads!=thread_id){
-      switch(cmd){
-        case CMD_WAIT:
-          unsigned int delay;
-          unsigned int target_thread_id;
-          int has_thread_id = parse_wait(fd_in, &delay, &target_thread_id);
-
-          if (has_thread_id == -1) {  
-            fprintf(stderr, "Invalid command. See HELP for usage\n");
-          } else if (has_thread_id && (int)target_thread_id == thread_id && delay > 0){
-            printf("Waiting...\n");
-            ems_wait(delay);
-          } else if (!has_thread_id && delay > 0){
-            printf("Waiting...\n");
-            ems_wait(delay);
-          }
-
-          break;
-        case CMD_BARRIER:
-          if (parse_barrier() == -1) {  
-            fprintf(stderr, "Invalid command. See HELP for usage\n");
-            continue;
-          }
-          if (delay > 0) {
-            printf("Waiting...\n");
-            barrier(delay, thread_id);
-          }
-          break;
-      }
-      continue;
-    }
     unsigned int event_id, delay;
     size_t num_rows, num_columns, num_coords;
     size_t xs[MAX_RESERVATION_SIZE], ys[MAX_RESERVATION_SIZE];
@@ -72,6 +43,9 @@ void* handle_commands (void * args){
         printf("create entered\n");
         if (parse_create(fd_in, &event_id, &num_rows, &num_columns) != 0) {
           fprintf(stderr, "Invalid command. See HELP for usage\n");
+          continue;
+        }
+        if (curCmd%total_threads!=thread_id){
           continue;
         }
         if (ems_create(event_id, num_rows, num_columns)) {
@@ -88,6 +62,9 @@ void* handle_commands (void * args){
           fprintf(stderr, "Failed Reserve. Invalid command. See HELP for usage\n");
           continue;
         }
+        if (curCmd%total_threads!=thread_id){
+          continue;
+        }
         if (ems_reserve(event_id, num_coords, xs, ys)) {
           fprintf(stderr, "Failed to reserve seats\n");
         }
@@ -100,31 +77,35 @@ void* handle_commands (void * args){
           fprintf(stderr, "Failed Show. Invalid command. See HELP for usage\n");
           continue;
         }
+        if (curCmd%total_threads!=thread_id){
+          continue;
+        }
         if (ems_show(event_id, fd_out)) {
           fprintf(stderr, "Failed to show event\n");
         }
         break;
 
       case CMD_LIST_EVENTS:
+        if (curCmd%total_threads!=thread_id){
+          continue;
+        }
         if (ems_list_events(fd_out)) {
           fprintf(stderr, "Failed to list events\n");
         }
         break;
 
       case CMD_WAIT:
-          unsigned int delay;
           unsigned int target_thread_id;
           int has_thread_id = parse_wait(fd_in, &delay, &target_thread_id);
 
           if (has_thread_id == -1) {  
             fprintf(stderr, "Invalid command. See HELP for usage\n");
-            continue;
           } else if (has_thread_id && (int)target_thread_id == thread_id && delay > 0){
             printf("Waiting...\n");
             ems_wait(delay);
           } else if (!has_thread_id && delay > 0){
             printf("Waiting...\n");
-            ems_wait(delay);
+            ems_wait(delay);  
           }
 
           break;
@@ -147,6 +128,9 @@ void* handle_commands (void * args){
         break;
 
       case CMD_BARRIER:
+        int *barrier_state = malloc(sizeof(int));
+          *barrier_state = BARRIER_ON;  // Set your result value
+        pthread_exit(barrier_state);
         break;
       case CMD_EMPTY:
         break;
@@ -154,7 +138,6 @@ void* handle_commands (void * args){
       case EOC:
         break;
     }
-    //printf("fim do while.\n");
   }
   return NULL;
 }
@@ -224,7 +207,6 @@ int main(int argc, char *argv[]) {
 
       else if (pid == 0){
         pthread_t tids [max_threads];
-        int barrier = 1;
 
         proc_count++;
         
@@ -260,8 +242,10 @@ int main(int argc, char *argv[]) {
           return 1;
         }
 
-        while (barrier == 1){
-          barrier = 0;
+        int barrier = BARRIER_ON;
+        while (barrier == BARRIER_ON){
+          barrier = BARRIER_OFF;
+          int *thread_result;
           ThreadArgs *args = (ThreadArgs*) malloc(sizeof(ThreadArgs) * (size_t)max_threads); 
 
           if (args == NULL) {
@@ -282,19 +266,31 @@ int main(int argc, char *argv[]) {
           }
           //wait for all threads
           for (int i = 0; i < max_threads; ++i) {
-            pthread_join(tids[i], NULL);
+            pthread_join(tids[i], (void **)&thread_result);
+            if (thread_result != NULL){
+              int thread_state = *thread_result;
+              if (thread_state == BARRIER_ON){
+                barrier = thread_state;
+              }
+            }
+          }
+          if (barrier ==1){
+            printf("encontrou barrier\n");
           }
           //free all the structs
           //printf("All Threads terminated, ready to continue.\n");
           //to resume the thread, temos de recomeçar a partir do barrier q as fez parar
           free(args);
+          free(thread_result);
         }
         
-        close(fd_out);
         free(file_out_path);
         free(file_name);
-        close(fd_in);
         free(file_path);
+
+        close(fd_in);
+        close(fd_out);
+
         exit(0);
       } else {
         // Parent process

@@ -4,10 +4,14 @@
 #include <string.h>
 #include <unistd.h>
 #include <pthread.h>
-#include <errno.h> 
-
+#include <errno.h>
 #include "eventlist.h"
 #include "constants.h"
+
+typedef struct {
+    size_t x;
+    size_t y;
+} Coordinate;
 
 static struct EventList* event_list = NULL;
 static unsigned int state_access_delay_ms = 0;
@@ -52,6 +56,26 @@ static unsigned int* get_seat_with_delay(struct Event* event, size_t index) {
 /// @param col Column of the seat.
 /// @return Index of the seat.
 static size_t seat_index(struct Event* event, size_t row, size_t col) { return (row - 1) * event->cols + col - 1; }
+
+int compare_coordinates(const void *a, const void *b) {
+    const Coordinate *coord1 = (const Coordinate *)a;
+    const Coordinate *coord2 = (const Coordinate *)b;
+
+    if (coord1->x < coord2->x) {
+        return -1;
+    } else if (coord1->x > coord2->x) {
+        return 1;
+    } else {
+        // If x-values are equal, compare using y-values
+        if (coord1->y < coord2->y) {
+            return -1;
+        } else if (coord1->y > coord2->y) {
+            return 1;
+        } else {
+            return 0;
+        }
+    }
+}
 
 int ems_init(unsigned int delay_ms) {
   if (event_list != NULL) {
@@ -131,8 +155,25 @@ int ems_reserve(unsigned int event_id, size_t num_seats, size_t* xs, size_t* ys)
     fprintf(stderr, "Event not found\n");
     return 1;
   }
+  Coordinate coordinates[num_seats];
+  for (int i=0; i<(int)num_seats;i++){
+    coordinates[i].x= xs[i];
+    coordinates[i].y= ys[i];
+  }
+
+  qsort(coordinates, num_seats, sizeof(Coordinate), compare_coordinates);
+
+  for (int i=0; i< (int)num_seats;i++){
+    xs[i]=coordinates[i].x;
+    ys[i]=coordinates[i].y;
+  }
 
   unsigned int reservation_id = ++event->reservations;
+
+  size_t j =0;
+  for(; j<num_seats; j++){
+    j++;
+  }
 
   size_t i = 0;
   for (; i < num_seats; i++) {
@@ -149,13 +190,14 @@ int ems_reserve(unsigned int event_id, size_t num_seats, size_t* xs, size_t* ys)
       break;
     }
 
+
     *get_seat_with_delay(event, seat_index(event, row, col)) = reservation_id;
   }
 
   // If the reservation was not successful, free the seats that were reserved.
   if (i < num_seats) {
     event->reservations--;
-    for (size_t j = 0; j < i; j++) {
+    for (j = 0; j < i; j++) {
       *get_seat_with_delay(event, seat_index(event, xs[j], ys[j])) = 0;
     }
     return 1;
@@ -311,6 +353,7 @@ int ems_list_events(int fd_out) {
 
   return 0;
 }
+
 
 void ems_wait(unsigned int delay_ms) {
     struct timespec delay = {delay_ms / 1000, \
