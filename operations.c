@@ -165,6 +165,8 @@ int ems_reserve(unsigned int event_id, size_t num_seats, size_t* xs, size_t* ys)
 }
 
 int ems_show(unsigned int event_id, int fd_out) {
+  size_t len;
+  int done;
 
   if (event_list == NULL) {
     fprintf(stderr, "EMS state must be initialized\n");
@@ -191,10 +193,10 @@ int ems_show(unsigned int event_id, int fd_out) {
 
       sprintf(str, "%u", *seat);
 
-      int len = strlen(str);
-      int done = 0;
+      len = strlen(str);
+      done = 0;
       while (len > 0) {
-        int bytes_written = write(fd_out, str + done, len);
+        ssize_t bytes_written = write(fd_out, str + done, len);
 
         if (bytes_written < 0){
           fprintf(stderr, "write error: %s\n", strerror(errno));
@@ -202,16 +204,16 @@ int ems_show(unsigned int event_id, int fd_out) {
         }
 
         /* might not have managed to write all, len becomes what remains */
-        len -= bytes_written;
-        done += bytes_written;
+        len -= (size_t) bytes_written;
+        done += (int) bytes_written;
       }
 
       if (j < event->cols) {
 
-        int len = strlen(" ");
-        int done = 0;
+        len = strlen(" ");
+        done = 0;
         while (len > 0) {
-          int bytes_written = write(fd_out, " " + done, len);
+          ssize_t bytes_written = write(fd_out, " " + done, len);
 
           if (bytes_written < 0){
             fprintf(stderr, "write error: %s\n", strerror(errno));
@@ -219,18 +221,18 @@ int ems_show(unsigned int event_id, int fd_out) {
           }
 
           /* might not have managed to write all, len becomes what remains */
-          len -= bytes_written;
-          done += bytes_written;
+          len -= (size_t) bytes_written;
+          done += (int) bytes_written;
         }
       }
 
       free(str);
     }
 
-    int len = strlen("\n");
-    int done = 0;
+    len = strlen("\n");
+    done = 0;
     while (len > 0) {
-      int bytes_written = write(fd_out, "\n" + done, len);
+      ssize_t bytes_written = write(fd_out, "\n" + done, len);
 
       if (bytes_written < 0){
         fprintf(stderr, "write error: %s\n", strerror(errno));
@@ -238,8 +240,8 @@ int ems_show(unsigned int event_id, int fd_out) {
       }
 
       /* might not have managed to write all, len becomes what remains */
-      len -= bytes_written;
-      done += bytes_written;
+      len -= (size_t) bytes_written;
+      done += (int) bytes_written;
     }
   }
 
@@ -247,6 +249,8 @@ int ems_show(unsigned int event_id, int fd_out) {
 }
 
 int ems_list_events(int fd_out) {
+  size_t len;
+  int done;
 
   if (event_list == NULL) {
     fprintf(stderr, "EMS state must be initialized\n");
@@ -255,10 +259,10 @@ int ems_list_events(int fd_out) {
 
   if (event_list->head == NULL) {
 
-      int len = strlen(MSG_NO_EVENTS);
-      int done = 0;
+      len = strlen(MSG_NO_EVENTS);
+      done = 0;
       while (len > 0) {
-        int bytes_written = write(fd_out, MSG_NO_EVENTS + done, len);
+        ssize_t bytes_written = write(fd_out, MSG_NO_EVENTS + done, len);
 
         if (bytes_written < 0){
           fprintf(stderr, "write error: %s\n", strerror(errno));
@@ -266,8 +270,8 @@ int ems_list_events(int fd_out) {
         }
 
         /* might not have managed to write all, len becomes what remains */
-        len -= bytes_written;
-        done += bytes_written;
+        len -= (size_t) bytes_written;
+        done += (int) bytes_written;
       }
 
     return 0;
@@ -285,10 +289,10 @@ int ems_list_events(int fd_out) {
 
     sprintf(str, "Event: %u\n", (current->event)->id);
 
-    int len = strlen(str);
-    int done = 0;
+    len = strlen(str);
+    done = 0;
     while (len > 0) {
-        int bytes_written = write(fd_out, str + done, len);
+        ssize_t bytes_written = write(fd_out, str + done, len);
 
         if (bytes_written < 0){
           fprintf(stderr, "write error: %s\n", strerror(errno));
@@ -296,8 +300,8 @@ int ems_list_events(int fd_out) {
         }
 
         /* might not have managed to write all, len becomes what remains */
-        len -= bytes_written;
-        done += bytes_written;
+        len -= (size_t) bytes_written;
+        done += (int) bytes_written;
     }
 
     current = current->next;
