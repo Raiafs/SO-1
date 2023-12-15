@@ -40,35 +40,36 @@ void* handle_commands (void * args){
 
     switch (cmd) {
       case CMD_CREATE:
-        printf("create entered\n");
+        
         if (parse_create(fd_in, &event_id, &num_rows, &num_columns) != 0) {
           fprintf(stderr, "Invalid command. See HELP for usage\n");
           continue;
         }
-        if (curCmd%total_threads!=thread_id){
-          continue;
+        if (curCmd%total_threads==thread_id){
+          printf("create entered\n");
+          if (ems_create(event_id, num_rows, num_columns)) {
+            fprintf(stderr, "Failed to create event\n");
+          }
+          printf("finished create.\n");
         }
-        if (ems_create(event_id, num_rows, num_columns)) {
-          fprintf(stderr, "Failed to create event\n");
-        }
-        printf("finished create.\n");
+        
         break;
 
       case CMD_RESERVE:
-        printf("reserve entered\n");
         num_coords = parse_reserve(fd_in, MAX_RESERVATION_SIZE, &event_id, xs, ys);
 
         if (num_coords == 0) {
           fprintf(stderr, "Failed Reserve. Invalid command. See HELP for usage\n");
           continue;
         }
-        if (curCmd%total_threads!=thread_id){
-          continue;
+        if (curCmd%total_threads==thread_id){
+          printf("reserve entered\n");
+          if (ems_reserve(event_id, num_coords, xs, ys)) {
+            fprintf(stderr, "Failed to reserve seats\n");
+          }
+          printf("reserve finished\n");
         }
-        if (ems_reserve(event_id, num_coords, xs, ys)) {
-          fprintf(stderr, "Failed to reserve seats\n");
-        }
-        printf("reserve finished\n");
+        
         break;
 
       case CMD_SHOW:
@@ -138,6 +139,7 @@ void* handle_commands (void * args){
       case EOC:
         break;
     }
+    curCmd++;
   }
   return NULL;
 }

@@ -129,6 +129,7 @@ int ems_create(unsigned int event_id, size_t num_rows, size_t num_cols) {
   event->cols = num_cols;
   event->reservations = 0;
   event->data = malloc(num_rows * num_cols * sizeof(unsigned int));
+  event->mutex = malloc(num_rows * num_cols * sizeof(pthread_mutex_t));
 
   if (event->data == NULL) {
     fprintf(stderr, "Error allocating memory for event data\n");
@@ -140,9 +141,14 @@ int ems_create(unsigned int event_id, size_t num_rows, size_t num_cols) {
     event->data[i] = 0;
   }
 
+  for (size_t i = 0; i < num_rows * num_cols; i++) {
+    event->mutex[i] = PTHREAD_MUTEX_INITIALIZER;
+  }
+
   if (append_to_list(event_list, event) != 0) {
     fprintf(stderr, "Error appending event to list\n");
     free(event->data);
+    free(event->mutex);
     free(event);
     return 1;
   }
@@ -181,6 +187,7 @@ int ems_reserve(unsigned int event_id, size_t num_seats, size_t* xs, size_t* ys)
   for(; e<num_seats; e++){
     size_t row = xs[e];
     size_t col = ys[e];
+    printf("a");
     pthread_mutex_lock(get_lock_with_delay(event, seat_index(event, row, col)));
     if (row <= 0 || row > event->rows || col <= 0 || col > event->cols) {
       fprintf(stderr, "Invalid seat\n");
