@@ -41,7 +41,7 @@ void* handle_commands (void * args){
 
     switch (cmd) {
       case CMD_CREATE:
-        //printf("create entered\n");
+        printf("create entered\n");
         if (parse_create(fd_in, &event_id, &num_rows, &num_columns) != 0) {
           fprintf(stderr, "Invalid command. See HELP for usage\n");
           continue;
@@ -49,11 +49,11 @@ void* handle_commands (void * args){
         if (ems_create(event_id, num_rows, num_columns)) {
           fprintf(stderr, "Failed to create event\n");
         }
-        //printf("finished create.\n");
+        printf("finished create.\n");
         break;
 
       case CMD_RESERVE:
-        //printf("reserve entered\n");
+        printf("reserve entered\n");
         num_coords = parse_reserve(fd_in, MAX_RESERVATION_SIZE, &event_id, xs, ys);
 
         if (num_coords == 0) {
@@ -63,11 +63,11 @@ void* handle_commands (void * args){
         if (ems_reserve(event_id, num_coords, xs, ys)) {
           fprintf(stderr, "Failed to reserve seats\n");
         }
-        //printf("reserve finished\n");
+        printf("reserve finished\n");
         break;
 
       case CMD_SHOW:
-        //printf("entered show.\n");
+        printf("entered show.\n");
         if (parse_show(fd_in, &event_id) != 0) {
           fprintf(stderr, "Failed Show. Invalid command. See HELP for usage\n");
           continue;
@@ -84,13 +84,13 @@ void* handle_commands (void * args){
         break;
 
       case CMD_WAIT:
-        if (parse_wait(fd_in, &delay, NULL) == -1) {  // thread_id is not implemented
+        if (parse_wait(fd_in, &delay, NULL) == -1) {  
           fprintf(stderr, "Invalid command. See HELP for usage\n");
           continue;
         }
         if (delay > 0) {
-          //printf("Waiting...\n");
-          ems_wait(delay);
+          printf("Waiting...\n");
+          ems_wait(delay, thread_id);
         }
         break;
 

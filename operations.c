@@ -3,12 +3,16 @@
 #include <time.h>
 #include <string.h>
 #include <unistd.h>
+#include <pthread.h>
 
 #include "eventlist.h"
 #include "constants.h"
 
 static struct EventList* event_list = NULL;
 static unsigned int state_access_delay_ms = 0;
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
+int target_thread_id;
 
 /// Calculates a timespec from a delay in milliseconds.
 /// @param delay_ms Delay in milliseconds.
@@ -232,7 +236,24 @@ int ems_list_events(int file_out) {
   return 0;
 }
 
-void ems_wait(unsigned int delay_ms) {
-  struct timespec delay = delay_to_timespec(delay_ms);
-  nanosleep(&delay, NULL);
+void ems_wait(unsigned int delay_ms, int thread_id) {
+    pthread_mutex_lock(&mutex);
+    if (thread_id >= 0) {
+        while (thread_id != target_thread_id) {
+            pthread_cond_wait(&cond, &mutex);
+        }
+    } else {
+        target_thread_id = -1;  // Reset the target_thread_id for global wait
+    }
+
+    pthread_cond_broadcast(&cond);  // Notify all waiting threads
+    pthread_mutex_unlock(&mutex);
+
+    struct timespec delay = {delay_ms / 1000, (delay_ms % 1000) * 1000000}; //{Seconds, Nanoseconds} Converted from miliseconds
+    nanosleep(&delay, NULL);  // Sleep for the specified delay
+
+    pthread_mutex_lock(&mutex);
+    target_thread_id = -1;  // Reset the target_thread_id
+    pthread_cond_broadcast(&cond);  // Notify all waiting threads
+    pthread_mutex_unlock(&mutex);
 }
