@@ -34,14 +34,19 @@ void* handle_commands (void * args){
       switch(cmd){
         case CMD_WAIT:
           unsigned int delay;
-          if (parse_wait(fd_in, &delay, NULL) == -1) {  
+          unsigned int target_thread_id;
+          int has_thread_id = parse_wait(fd_in, &delay, &target_thread_id);
+
+          if (has_thread_id == -1) {  
             fprintf(stderr, "Invalid command. See HELP for usage\n");
-            continue;
-          }
-          if (delay > 0) {
+          } else if (has_thread_id && (int)target_thread_id == thread_id && delay > 0){
             printf("Waiting...\n");
-            ems_wait(delay, thread_id);
+            ems_wait(delay);
+          } else if (!has_thread_id && delay > 0){
+            printf("Waiting...\n");
+            ems_wait(delay);
           }
+
           break;
         case CMD_BARRIER:
           if (parse_barrier() == -1) {  
@@ -107,15 +112,22 @@ void* handle_commands (void * args){
         break;
 
       case CMD_WAIT:
-        if (parse_wait(fd_in, &delay, NULL) == -1) {  
-          fprintf(stderr, "Invalid command. See HELP for usage\n");
-          continue;
-        }
-        if (delay > 0) {
-          printf("Waiting...\n");
-          ems_wait(delay, thread_id);
-        }
-        break;
+          unsigned int delay;
+          unsigned int target_thread_id;
+          int has_thread_id = parse_wait(fd_in, &delay, &target_thread_id);
+
+          if (has_thread_id == -1) {  
+            fprintf(stderr, "Invalid command. See HELP for usage\n");
+            continue;
+          } else if (has_thread_id && (int)target_thread_id == thread_id && delay > 0){
+            printf("Waiting...\n");
+            ems_wait(delay);
+          } else if (!has_thread_id && delay > 0){
+            printf("Waiting...\n");
+            ems_wait(delay);
+          }
+
+          break;
 
       case CMD_INVALID:
         fprintf(stderr, "Invalido. Invalid command. See HELP for usage\n");

@@ -236,24 +236,8 @@ int ems_list_events(int file_out) {
   return 0;
 }
 
-void ems_wait(unsigned int delay_ms, int thread_id) {
-    pthread_mutex_lock(&mutex);
-    if (thread_id >= 0) {
-        while (thread_id != target_thread_id) {
-            pthread_cond_wait(&cond, &mutex);
-        }
-    } else {
-        target_thread_id = -1;  // Reset the target_thread_id for global wait
-    }
-
-    pthread_cond_broadcast(&cond);  // Notify all waiting threads
-    pthread_mutex_unlock(&mutex);
-
-    struct timespec delay = {delay_ms / 1000, (delay_ms % 1000) * 1000000}; //{Seconds, Nanoseconds} Converted from miliseconds
+void ems_wait(unsigned int delay_ms) {
+    struct timespec delay = {delay_ms / 1000, \
+                    (delay_ms % 1000) * 1000000}; //{Seconds, Nanoseconds} Converted from miliseconds
     nanosleep(&delay, NULL);  // Sleep for the specified delay
-
-    pthread_mutex_lock(&mutex);
-    target_thread_id = -1;  // Reset the target_thread_id
-    pthread_cond_broadcast(&cond);  // Notify all waiting threads
-    pthread_mutex_unlock(&mutex);
 }
