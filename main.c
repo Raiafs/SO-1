@@ -28,16 +28,39 @@ void* handle_commands (void * args){
   int total_threads = cmdArgs->total_threads;
   int fd_out = cmdArgs->fd_out;
   int curCmd = 0; // tem de se mudar para cenários de barrier, em q o 1o comando desta vez é o q vem depois do barrier
-  //printf("file: %s \n", cmdArgs->file_name);
 
-  while ((cmd = get_next(fd_in)) != EOC && curCmd%total_threads==thread_id ) {
+  while ((cmd = get_next(fd_in)) != EOC) {
+    if (curCmd%total_threads!=thread_id){
+      switch(cmd){
+        case CMD_WAIT:
+          unsigned int delay;
+          if (parse_wait(fd_in, &delay, NULL) == -1) {  
+            fprintf(stderr, "Invalid command. See HELP for usage\n");
+            continue;
+          }
+          if (delay > 0) {
+            printf("Waiting...\n");
+            ems_wait(delay, thread_id);
+          }
+          break;
+        case CMD_BARRIER:
+          if (parse_barrier() == -1) {  
+            fprintf(stderr, "Invalid command. See HELP for usage\n");
+            continue;
+          }
+          if (delay > 0) {
+            printf("Waiting...\n");
+            barrier(delay, thread_id);
+          }
+          break;
+      }
+      continue;
+    }
     unsigned int event_id, delay;
     size_t num_rows, num_columns, num_coords;
     size_t xs[MAX_RESERVATION_SIZE], ys[MAX_RESERVATION_SIZE];
 
     fflush(stdout);
-    //printf("ciclo n.\n");
-
 
     switch (cmd) {
       case CMD_CREATE:
@@ -111,8 +134,8 @@ void* handle_commands (void * args){
 
         break;
 
-      case CMD_BARRIER:  // Not implemented
-      
+      case CMD_BARRIER:
+        break;
       case CMD_EMPTY:
         break;
 
