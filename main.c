@@ -14,6 +14,8 @@
 #include "operations.h"
 #include "parser.h"
 
+pthread_mutex_t writing_locker;
+
 typedef struct ThreadArgs{
   int thread_id;
   int total_threads;
@@ -75,23 +77,28 @@ void* handle_commands (void * args){
         break;
 
       case CMD_SHOW:
+
         
         if (parse_show(fd_in, &event_id) != 0) {
           fprintf(stderr, "Failed Show. Invalid command. See HELP for usage\n");
           continue;
         }
         if (curCmd%total_threads==thread_id && curCmd>=start_line){
+          pthread_mutex_lock(&writing_locker);
           if (ems_show(event_id, fd_out)) {
             fprintf(stderr, "Failed to show event\n");
           }
+          pthread_mutex_unlock(&writing_locker);
         }
         break;
 
       case CMD_LIST_EVENTS:
         if (curCmd%total_threads==thread_id && curCmd>=start_line){
+          pthread_mutex_lock(&writing_locker);
           if (ems_list_events(fd_out)) {
             fprintf(stderr, "Failed to list events\n");
           }
+          pthread_mutex_unlock(&writing_locker);
         }
         break;
 
@@ -222,6 +229,7 @@ int main(int argc, char *argv[]) {
         char* file_path = malloc((strlen(dir_str)+ strlen(file_searcher->d_name)+2)*sizeof(char));
         strcpy(file_path, dir_str);
         strcat(file_path, file_searcher->d_name);
+
         
         int fd_in = open(file_path, O_RDONLY);
         if (fd_in < 0){
@@ -297,7 +305,6 @@ int main(int argc, char *argv[]) {
 
         close(fd_in);
         close(fd_out);
-
         exit(0);
       } else {
         // Parent process
