@@ -1,2 +1,3 @@
 CREATE 2 10 10
 RESERVE 2 [(2,2) (9,9)]
+SHOW 2
