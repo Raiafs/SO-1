@@ -6,3 +6,6 @@
 #define MSG_SHOW "show entered\n"
 #define MSG_NO_EVENTS "No events\n"
 #define MSG_WAITING "Waiting...\n"
+
+#define BARRIER_ON 1
+#define BARRIER_OFF 0

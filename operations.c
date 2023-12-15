@@ -4,9 +4,14 @@
 #include <string.h>
 #include <unistd.h>
 #include <pthread.h>
-
+#include <errno.h>
 #include "eventlist.h"
 #include "constants.h"
+
+typedef struct {
+    size_t x;
+    size_t y;
+} Coordinate;
 
 static struct EventList* event_list = NULL;
 static unsigned int state_access_delay_ms = 0;
@@ -51,6 +56,26 @@ static unsigned int* get_seat_with_delay(struct Event* event, size_t index) {
 /// @param col Column of the seat.
 /// @return Index of the seat.
 static size_t seat_index(struct Event* event, size_t row, size_t col) { return (row - 1) * event->cols + col - 1; }
+
+int compare_coordinates(const void *a, const void *b) {
+    const Coordinate *coord1 = (const Coordinate *)a;
+    const Coordinate *coord2 = (const Coordinate *)b;
+
+    if (coord1->x < coord2->x) {
+        return -1;
+    } else if (coord1->x > coord2->x) {
+        return 1;
+    } else {
+        // If x-values are equal, compare using y-values
+        if (coord1->y < coord2->y) {
+            return -1;
+        } else if (coord1->y > coord2->y) {
+            return 1;
+        } else {
+            return 0;
+        }
+    }
+}
 
 int ems_init(unsigned int delay_ms) {
   if (event_list != NULL) {
@@ -130,8 +155,25 @@ int ems_reserve(unsigned int event_id, size_t num_seats, size_t* xs, size_t* ys)
     fprintf(stderr, "Event not found\n");
     return 1;
   }
+  Coordinate coordinates[num_seats];
+  for (int i=0; i<(int)num_seats;i++){
+    coordinates[i].x= xs[i];
+    coordinates[i].y= ys[i];
+  }
+
+  qsort(coordinates, num_seats, sizeof(Coordinate), compare_coordinates);
+
+  for (int i=0; i< (int)num_seats;i++){
+    xs[i]=coordinates[i].x;
+    ys[i]=coordinates[i].y;
+  }
 
   unsigned int reservation_id = ++event->reservations;
+
+  size_t j =0;
+  for(; j<num_seats; j++){
+    j++;
+  }
 
   size_t i = 0;
   for (; i < num_seats; i++) {
@@ -148,13 +190,14 @@ int ems_reserve(unsigned int event_id, size_t num_seats, size_t* xs, size_t* ys)
       break;
     }
 
+
     *get_seat_with_delay(event, seat_index(event, row, col)) = reservation_id;
   }
 
   // If the reservation was not successful, free the seats that were reserved.
   if (i < num_seats) {
     event->reservations--;
-    for (size_t j = 0; j < i; j++) {
+    for (j = 0; j < i; j++) {
       *get_seat_with_delay(event, seat_index(event, xs[j], ys[j])) = 0;
     }
     return 1;
@@ -163,7 +206,9 @@ int ems_reserve(unsigned int event_id, size_t num_seats, size_t* xs, size_t* ys)
   return 0;
 }
 
-int ems_show(unsigned int event_id, int file_out) {
+int ems_show(unsigned int event_id, int fd_out) {
+  size_t len;
+  int done;
 
   if (event_list == NULL) {
     fprintf(stderr, "EMS state must be initialized\n");
@@ -189,21 +234,65 @@ int ems_show(unsigned int event_id, int file_out) {
       }
 
       sprintf(str, "%u", *seat);
-      write(file_out, str, strlen(str));
+
+      len = strlen(str);
+      done = 0;
+      while (len > 0) {
+        ssize_t bytes_written = write(fd_out, str + done, len);
+
+        if (bytes_written < 0){
+          fprintf(stderr, "write error: %s\n", strerror(errno));
+          return -1;
+        }
+
+        /* might not have managed to write all, len becomes what remains */
+        len -= (size_t) bytes_written;
+        done += (int) bytes_written;
+      }
 
       if (j < event->cols) {
-        write(file_out, " ", strlen(" "));
+
+        len = strlen(" ");
+        done = 0;
+        while (len > 0) {
+          ssize_t bytes_written = write(fd_out, " " + done, len);
+
+          if (bytes_written < 0){
+            fprintf(stderr, "write error: %s\n", strerror(errno));
+            return -1;
+          }
+
+          /* might not have managed to write all, len becomes what remains */
+          len -= (size_t) bytes_written;
+          done += (int) bytes_written;
+        }
       }
+
       free(str);
     }
 
-    write(file_out, "\n", strlen("\n"));
+    len = strlen("\n");
+    done = 0;
+    while (len > 0) {
+      ssize_t bytes_written = write(fd_out, "\n" + done, len);
+
+      if (bytes_written < 0){
+        fprintf(stderr, "write error: %s\n", strerror(errno));
+        return -1;
+      }
+
+      /* might not have managed to write all, len becomes what remains */
+      len -= (size_t) bytes_written;
+      done += (int) bytes_written;
+    }
   }
 
   return 0;
 }
 
-int ems_list_events(int file_out) {
+int ems_list_events(int fd_out) {
+  size_t len;
+  int done;
 
   if (event_list == NULL) {
     fprintf(stderr, "EMS state must be initialized\n");
@@ -211,7 +300,22 @@ int ems_list_events(int file_out) {
   }
 
   if (event_list->head == NULL) {
-    write(file_out, MSG_NO_EVENTS, strlen(MSG_NO_EVENTS));
+
+      len = strlen(MSG_NO_EVENTS);
+      done = 0;
+      while (len > 0) {
+        ssize_t bytes_written = write(fd_out, MSG_NO_EVENTS + done, len);
+
+        if (bytes_written < 0){
+          fprintf(stderr, "write error: %s\n", strerror(errno));
+          return -1;
+        }
+
+        /* might not have managed to write all, len becomes what remains */
+        len -= (size_t) bytes_written;
+        done += (int) bytes_written;
+      }
+
     return 0;
   }
 
@@ -226,7 +330,21 @@ int ems_list_events(int file_out) {
     }
 
     sprintf(str, "Event: %u\n", (current->event)->id);
-    write(file_out, str, strlen(str));
+
+    len = strlen(str);
+    done = 0;
+    while (len > 0) {
+        ssize_t bytes_written = write(fd_out, str + done, len);
+
+        if (bytes_written < 0){
+          fprintf(stderr, "write error: %s\n", strerror(errno));
+          return -1;
+        }
+
+        /* might not have managed to write all, len becomes what remains */
+        len -= (size_t) bytes_written;
+        done += (int) bytes_written;
+    }
 
     current = current->next;
     
@@ -236,24 +354,9 @@ int ems_list_events(int file_out) {
   return 0;
 }
 
-void ems_wait(unsigned int delay_ms, int thread_id) {
-    pthread_mutex_lock(&mutex);
-    if (thread_id >= 0) {
-        while (thread_id != target_thread_id) {
-            pthread_cond_wait(&cond, &mutex);
-        }
-    } else {
-        target_thread_id = -1;  // Reset the target_thread_id for global wait
-    }
 
-    pthread_cond_broadcast(&cond);  // Notify all waiting threads
-    pthread_mutex_unlock(&mutex);
-
-    struct timespec delay = {delay_ms / 1000, (delay_ms % 1000) * 1000000}; //{Seconds, Nanoseconds} Converted from miliseconds
+void ems_wait(unsigned int delay_ms) {
+    struct timespec delay = {delay_ms / 1000, \
+                    (delay_ms % 1000) * 1000000}; //{Seconds, Nanoseconds} Converted from miliseconds
     nanosleep(&delay, NULL);  // Sleep for the specified delay
-
-    pthread_mutex_lock(&mutex);
-    target_thread_id = -1;  // Reset the target_thread_id
-    pthread_cond_broadcast(&cond);  // Notify all waiting threads
-    pthread_mutex_unlock(&mutex);
 }
