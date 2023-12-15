@@ -4,6 +4,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <pthread.h>
+#include <errno.h> 
 
 #include "eventlist.h"
 #include "constants.h"
@@ -163,7 +164,7 @@ int ems_reserve(unsigned int event_id, size_t num_seats, size_t* xs, size_t* ys)
   return 0;
 }
 
-int ems_show(unsigned int event_id, int file_out) {
+int ems_show(unsigned int event_id, int fd_out) {
 
   if (event_list == NULL) {
     fprintf(stderr, "EMS state must be initialized\n");
@@ -189,21 +190,63 @@ int ems_show(unsigned int event_id, int file_out) {
       }
 
       sprintf(str, "%u", *seat);
-      write(file_out, str, strlen(str));
+
+      int len = strlen(str);
+      int done = 0;
+      while (len > 0) {
+        int bytes_written = write(fd_out, str + done, len);
+
+        if (bytes_written < 0){
+          fprintf(stderr, "write error: %s\n", strerror(errno));
+          return -1;
+        }
+
+        /* might not have managed to write all, len becomes what remains */
+        len -= bytes_written;
+        done += bytes_written;
+      }
 
       if (j < event->cols) {
-        write(file_out, " ", strlen(" "));
+
+        int len = strlen(" ");
+        int done = 0;
+        while (len > 0) {
+          int bytes_written = write(fd_out, " " + done, len);
+
+          if (bytes_written < 0){
+            fprintf(stderr, "write error: %s\n", strerror(errno));
+            return -1;
+          }
+
+          /* might not have managed to write all, len becomes what remains */
+          len -= bytes_written;
+          done += bytes_written;
+        }
       }
+
       free(str);
     }
 
-    write(file_out, "\n", strlen("\n"));
+    int len = strlen("\n");
+    int done = 0;
+    while (len > 0) {
+      int bytes_written = write(fd_out, "\n" + done, len);
+
+      if (bytes_written < 0){
+        fprintf(stderr, "write error: %s\n", strerror(errno));
+        return -1;
+      }
+
+      /* might not have managed to write all, len becomes what remains */
+      len -= bytes_written;
+      done += bytes_written;
+    }
   }
 
   return 0;
 }
 
-int ems_list_events(int file_out) {
+int ems_list_events(int fd_out) {
 
   if (event_list == NULL) {
     fprintf(stderr, "EMS state must be initialized\n");
@@ -211,7 +254,22 @@ int ems_list_events(int file_out) {
   }
 
   if (event_list->head == NULL) {
-    write(file_out, MSG_NO_EVENTS, strlen(MSG_NO_EVENTS));
+
+      int len = strlen(MSG_NO_EVENTS);
+      int done = 0;
+      while (len > 0) {
+        int bytes_written = write(fd_out, MSG_NO_EVENTS + done, len);
+
+        if (bytes_written < 0){
+          fprintf(stderr, "write error: %s\n", strerror(errno));
+          return -1;
+        }
+
+        /* might not have managed to write all, len becomes what remains */
+        len -= bytes_written;
+        done += bytes_written;
+      }
+
     return 0;
   }
 
@@ -226,7 +284,21 @@ int ems_list_events(int file_out) {
     }
 
     sprintf(str, "Event: %u\n", (current->event)->id);
-    write(file_out, str, strlen(str));
+
+    int len = strlen(str);
+    int done = 0;
+    while (len > 0) {
+        int bytes_written = write(fd_out, str + done, len);
+
+        if (bytes_written < 0){
+          fprintf(stderr, "write error: %s\n", strerror(errno));
+          return -1;
+        }
+
+        /* might not have managed to write all, len becomes what remains */
+        len -= bytes_written;
+        done += bytes_written;
+    }
 
     current = current->next;
     
