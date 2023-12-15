@@ -13,31 +13,54 @@
 #include "operations.h"
 #include "parser.h"
 
-struct ThreadArgs {
+typedef struct {
   int thread_id;
   int total_threads;
   char* file_name;
   int fd_out;
-}treateArgs;
+} ThreadArgs;
 
 void* handle_commands (void * args){
-  struct ThreadArgs *cmdArgs = (struct ThreadArgs *)args;
+  ThreadArgs *cmdArgs = (ThreadArgs *)args;
   enum Command cmd;
   int fd_in = open(cmdArgs->file_name, O_RDONLY);
   int thread_id = cmdArgs->thread_id;
   int total_threads = cmdArgs->total_threads;
   int fd_out = cmdArgs->fd_out;
   int curCmd = 0; // tem de se mudar para cenários de barrier, em q o 1o comando desta vez é o q vem depois do barrier
-  printf("file: %s \n", cmdArgs->file_name);
 
-  while ((cmd = get_next(fd_in)) != EOC && curCmd%total_threads==thread_id ) {
+  while ((cmd = get_next(fd_in)) != EOC) {
+    if (curCmd%total_threads!=thread_id){
+      switch(cmd){
+        case CMD_WAIT:
+          unsigned int delay;
+          if (parse_wait(fd_in, &delay, NULL) == -1) {  
+            fprintf(stderr, "Invalid command. See HELP for usage\n");
+            continue;
+          }
+          if (delay > 0) {
+            printf("Waiting...\n");
+            ems_wait(delay, thread_id);
+          }
+          break;
+        case CMD_BARRIER:
+          if (parse_barrier() == -1) {  
+            fprintf(stderr, "Invalid command. See HELP for usage\n");
+            continue;
+          }
+          if (delay > 0) {
+            printf("Waiting...\n");
+            barrier(delay, thread_id);
+          }
+          break;
+      }
+      continue;
+    }
     unsigned int event_id, delay;
     size_t num_rows, num_columns, num_coords;
     size_t xs[MAX_RESERVATION_SIZE], ys[MAX_RESERVATION_SIZE];
 
     fflush(stdout);
-    printf("ciclo n.\n");
-
 
     switch (cmd) {
       case CMD_CREATE:
@@ -84,13 +107,13 @@ void* handle_commands (void * args){
         break;
 
       case CMD_WAIT:
-        if (parse_wait(fd_in, &delay, NULL) == -1) {  // thread_id is not implemented
+        if (parse_wait(fd_in, &delay, NULL) == -1) {  
           fprintf(stderr, "Invalid command. See HELP for usage\n");
           continue;
         }
         if (delay > 0) {
           printf("Waiting...\n");
-          ems_wait(delay);
+          ems_wait(delay, thread_id);
         }
         break;
 
@@ -111,15 +134,15 @@ void* handle_commands (void * args){
 
         break;
 
-      case CMD_BARRIER:  // Not implemented
-      
+      case CMD_BARRIER:
+        break;
       case CMD_EMPTY:
         break;
 
       case EOC:
         break;
     }
-    printf("fim do while.\n");
+    //printf("fim do while.\n");
   }
   return NULL;
 }
@@ -192,13 +215,10 @@ int main(int argc, char *argv[]) {
         int barrier = 1;
 
         proc_count++;
-        printf("Child process created\n");//apenas para controlo
-        printf("Process nº %d\n", proc_count);//apenas para controlo
         
         char* file_path = malloc((strlen(dir_str)+ strlen(file_searcher->d_name)+2)*sizeof(char));
         strcpy(file_path, dir_str);
         strcat(file_path, file_searcher->d_name);
-        printf("%s\n", file_path);
         
         int fd_in = open(file_path, O_RDONLY);
         if (fd_in < 0){
@@ -222,21 +242,27 @@ int main(int argc, char *argv[]) {
         strcpy(file_out_path, dir_str);
         strcat(file_out_path, file_name);
 
-        int file_out = open(file_out_path, O_WRONLY | O_CREAT | O_TRUNC, 0644); //trocar var p fd_out pq é um file descriptor
-        if (file_out < 0){
+        int fd_out = open(file_out_path, O_WRONLY | O_CREAT | O_TRUNC, 0644); //trocar var p fd_out pq é um file descriptor
+        if (fd_out < 0){
           fprintf(stderr, "Failed to open file .out. Error: %s", strerror(errno));
           return 1;
         }
 
         while (barrier == 1){
           barrier = 0;
-          struct ThreadArgs *args = malloc(sizeof(struct ThreadArgs)*3); 
+          ThreadArgs *args = (ThreadArgs*) malloc(sizeof(ThreadArgs) * (size_t)max_threads); 
+
+          if (args == NULL) {
+              fprintf(stderr, "Memory allocation error\n");
+              break;
+          }
+
           // create all threads
           for (int num_threads = 0; num_threads < max_threads; num_threads++){
             args[num_threads].thread_id = num_threads;
             args[num_threads].file_name = file_path;
             args[num_threads].total_threads = max_threads;
-            args[num_threads].fd_out = file_out;
+            args[num_threads].fd_out = fd_out;
             if (pthread_create(&tids[num_threads],NULL, handle_commands, (void *)&args[num_threads]) != 0){
               fprintf(stderr, "error creating thread.\n");
               continue;
@@ -247,10 +273,12 @@ int main(int argc, char *argv[]) {
             pthread_join(tids[i], NULL);
           }
           //free all the structs
-          printf("All Threads terminated, ready to continue.\n");
+          //printf("All Threads terminated, ready to continue.\n");
           //to resume the thread, temos de recomeçar a partir do barrier q as fez parar
+          free(args);
         }
-        close(file_out);
+        
+        close(fd_out);
         free(file_out_path);
         free(file_name);
         close(fd_in);
