@@ -49,6 +49,13 @@ static unsigned int* get_seat_with_delay(struct Event* event, size_t index) {
   return &event->data[index];
 }
 
+static pthread_mutex_t* get_lock_with_delay(struct Event* event, size_t index) {
+  struct timespec delay = delay_to_timespec(state_access_delay_ms);
+  nanosleep(&delay, NULL);  // Should not be removed
+
+  return &event->mutex[index];
+}
+
 /// Gets the index of a seat.
 /// @note This function assumes that the seat exists.
 /// @param event Event to get the seat index from.
@@ -170,27 +177,34 @@ int ems_reserve(unsigned int event_id, size_t num_seats, size_t* xs, size_t* ys)
 
   unsigned int reservation_id = ++event->reservations;
 
-  size_t j =0;
-  for(; j<num_seats; j++){
-    j++;
+  size_t e =0;
+  for(; e<num_seats; e++){
+    size_t row = xs[e];
+    size_t col = ys[e];
+    pthread_mutex_lock(get_lock_with_delay(event, seat_index(event, row, col)));
+    if (row <= 0 || row > event->rows || col <= 0 || col > event->cols) {
+      fprintf(stderr, "Invalid seat\n");
+      break;
+    }
+    if (*get_seat_with_delay(event, seat_index(event, row, col)) != 0) {
+      fprintf(stderr, "Seat already reserved\n");
+      //add remover todos os locks
+      break;
+    }
+  }
+  size_t j=0;
+  if (e < num_seats) {
+    event->reservations--;
+    for (j = 0; j < e; j++) {
+      pthread_mutex_unlock(get_lock_with_delay(event, seat_index(event, xs[j], ys[j])));
+    }
+    return 1;
   }
 
   size_t i = 0;
   for (; i < num_seats; i++) {
     size_t row = xs[i];
     size_t col = ys[i];
-
-    if (row <= 0 || row > event->rows || col <= 0 || col > event->cols) {
-      fprintf(stderr, "Invalid seat\n");
-      break;
-    }
-
-    if (*get_seat_with_delay(event, seat_index(event, row, col)) != 0) {
-      fprintf(stderr, "Seat already reserved\n");
-      break;
-    }
-
-
     *get_seat_with_delay(event, seat_index(event, row, col)) = reservation_id;
   }
 
@@ -200,9 +214,15 @@ int ems_reserve(unsigned int event_id, size_t num_seats, size_t* xs, size_t* ys)
     for (j = 0; j < i; j++) {
       *get_seat_with_delay(event, seat_index(event, xs[j], ys[j])) = 0;
     }
+    for (j = 0; j < e; j++) {
+      pthread_mutex_unlock(get_lock_with_delay(event, seat_index(event, xs[j], ys[j])));
+    }
     return 1;
   }
 
+  for (j = 0; j < e; j++) {
+    pthread_mutex_unlock(get_lock_with_delay(event, seat_index(event, xs[j], ys[j])));
+  }
   return 0;
 }
 
@@ -210,17 +230,26 @@ int ems_show(unsigned int event_id, int fd_out) {
   size_t len;
   int done;
 
+  struct Event* event = get_event_with_delay(event_id);
+
   if (event_list == NULL) {
     fprintf(stderr, "EMS state must be initialized\n");
     return 1;
   }
 
-  struct Event* event = get_event_with_delay(event_id);
-
   if (event == NULL) {
     fprintf(stderr, "Event not found\n");
     return 1;
   }
+
+
+  size_t x =0;
+  for(; x<event->cols; x++){
+    size_t y =0;
+    for(; y<event->rows; y++)
+    pthread_mutex_lock(get_lock_with_delay(event, seat_index(event, x, y)));
+  }
+  printf("entered show.\n");
 
   for (size_t i = 1; i <= event->rows; i++) {
     for (size_t j = 1; j <= event->cols; j++) {
@@ -230,6 +259,11 @@ int ems_show(unsigned int event_id, int fd_out) {
 
       if (str == NULL) {
         fprintf(stderr, "Memory allocation error\n");
+        for(x=0; x<event->cols; x++){
+          size_t y =0;
+          for(; y<event->rows; y++)
+            pthread_mutex_lock(get_lock_with_delay(event, seat_index(event, x, y)));
+        }
         return 1;
       }
 
@@ -242,6 +276,11 @@ int ems_show(unsigned int event_id, int fd_out) {
 
         if (bytes_written < 0){
           fprintf(stderr, "write error: %s\n", strerror(errno));
+          for(x=0; x<event->cols; x++){
+           size_t y =0;
+            for(; y<event->rows; y++)
+              pthread_mutex_lock(get_lock_with_delay(event, seat_index(event, x, y)));
+          }
           return -1;
         }
 
@@ -259,6 +298,11 @@ int ems_show(unsigned int event_id, int fd_out) {
 
           if (bytes_written < 0){
             fprintf(stderr, "write error: %s\n", strerror(errno));
+            for(x=0; x<event->cols; x++){
+              size_t y =0;
+              for(; y<event->rows; y++)
+                pthread_mutex_lock(get_lock_with_delay(event, seat_index(event, x, y)));
+            }
             return -1;
           }
 
@@ -278,6 +322,11 @@ int ems_show(unsigned int event_id, int fd_out) {
 
       if (bytes_written < 0){
         fprintf(stderr, "write error: %s\n", strerror(errno));
+        for(x=0; x<event->cols; x++){
+          size_t y =0;
+          for(; y<event->rows; y++)
+            pthread_mutex_lock(get_lock_with_delay(event, seat_index(event, x, y)));
+        }
         return -1;
       }
 
@@ -286,7 +335,11 @@ int ems_show(unsigned int event_id, int fd_out) {
       done += (int) bytes_written;
     }
   }
-
+  for(x=0; x<event->cols; x++){
+    size_t y =0;
+      for(; y<event->rows; y++)
+        pthread_mutex_lock(get_lock_with_delay(event, seat_index(event, x, y)));
+  }
   return 0;
 }
 

@@ -72,7 +72,7 @@ void* handle_commands (void * args){
         break;
 
       case CMD_SHOW:
-        printf("entered show.\n");
+        
         if (parse_show(fd_in, &event_id) != 0) {
           fprintf(stderr, "Failed Show. Invalid command. See HELP for usage\n");
           continue;
