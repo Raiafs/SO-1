@@ -34,6 +34,7 @@ static void free_event(struct Event* event) {
   if (!event) return;
 
   free(event->data);
+  free(event->mutex);
   free(event);
 }
 
