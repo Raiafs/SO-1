@@ -14,12 +14,20 @@
 #include "operations.h"
 #include "parser.h"
 
-typedef struct {
+pthread_mutex_t writing_locker;
+
+typedef struct ThreadArgs{
   int thread_id;
   int total_threads;
   char* file_name;
   int fd_out;
+  int start_line;
 } ThreadArgs;
+
+typedef struct HandlerResult {
+    int barrier_state;   // 1 or 0 for boolean signaling
+    int curCmd;  // Some integer value
+} HandlerResult;
 
 void* handle_commands (void * args){
   ThreadArgs *cmdArgs = (ThreadArgs *)args;
@@ -28,9 +36,9 @@ void* handle_commands (void * args){
   int thread_id = cmdArgs->thread_id;
   int total_threads = cmdArgs->total_threads;
   int fd_out = cmdArgs->fd_out;
+  int start_line = cmdArgs->start_line;
   
   int curCmd = 0; // tem de se mudar para cenários de barrier, em q o 1o comando desta vez é o q vem depois do barrier
-
   while ((cmd = get_next(fd_in)) != EOC) {
     unsigned int event_id, delay;
     size_t num_rows, num_columns, num_coords;
@@ -45,12 +53,10 @@ void* handle_commands (void * args){
           fprintf(stderr, "Invalid command. See HELP for usage\n");
           continue;
         }
-        if (curCmd%total_threads==thread_id){
-          printf("create entered\n");
+        if (curCmd%total_threads==thread_id && curCmd>=start_line){
           if (ems_create(event_id, num_rows, num_columns)) {
             fprintf(stderr, "Failed to create event\n");
           }
-          printf("finished create.\n");
         }
         
         break;
@@ -62,76 +68,85 @@ void* handle_commands (void * args){
           fprintf(stderr, "Failed Reserve. Invalid command. See HELP for usage\n");
           continue;
         }
-        if (curCmd%total_threads==thread_id){
-          printf("reserve entered\n");
+        if (curCmd%total_threads==thread_id && curCmd>=start_line){
           if (ems_reserve(event_id, num_coords, xs, ys)) {
             fprintf(stderr, "Failed to reserve seats\n");
           }
-          printf("reserve finished\n");
         }
         
         break;
 
       case CMD_SHOW:
+
         
         if (parse_show(fd_in, &event_id) != 0) {
           fprintf(stderr, "Failed Show. Invalid command. See HELP for usage\n");
           continue;
         }
-        if (curCmd%total_threads!=thread_id){
-          continue;
-        }
-        if (ems_show(event_id, fd_out)) {
-          fprintf(stderr, "Failed to show event\n");
+        if (curCmd%total_threads==thread_id && curCmd>=start_line){
+          pthread_mutex_lock(&writing_locker);
+          if (ems_show(event_id, fd_out)) {
+            fprintf(stderr, "Failed to show event\n");
+          }
+          pthread_mutex_unlock(&writing_locker);
         }
         break;
 
       case CMD_LIST_EVENTS:
-        if (curCmd%total_threads!=thread_id){
-          continue;
-        }
-        if (ems_list_events(fd_out)) {
-          fprintf(stderr, "Failed to list events\n");
+        if (curCmd%total_threads==thread_id && curCmd>=start_line){
+          pthread_mutex_lock(&writing_locker);
+          if (ems_list_events(fd_out)) {
+            fprintf(stderr, "Failed to list events\n");
+          }
+          pthread_mutex_unlock(&writing_locker);
         }
         break;
 
       case CMD_WAIT:
           unsigned int target_thread_id;
           int has_thread_id = parse_wait(fd_in, &delay, &target_thread_id);
-
-          if (has_thread_id == -1) {  
-            fprintf(stderr, "Invalid command. See HELP for usage\n");
-          } else if (has_thread_id && (int)target_thread_id == thread_id && delay > 0){
-            printf("Waiting...\n");
-            ems_wait(delay);
-          } else if (!has_thread_id && delay > 0){
-            printf("Waiting...\n");
-            ems_wait(delay);  
+          if (curCmd>=start_line && parse_wait(fd_in, &delay, &target_thread_id)>0){
+              if (has_thread_id == -1) {  
+              fprintf(stderr, "Invalid command. See HELP for usage\n");
+            } else if (has_thread_id && (int)target_thread_id == thread_id+1 && delay > 0){
+              printf("Waiting...\n");
+              ems_wait(delay);
+            } else if (!has_thread_id && delay > 0){
+              printf("Waiting...\n");
+              ems_wait(delay);  
+            }
           }
-
+          
           break;
 
       case CMD_INVALID:
-        fprintf(stderr, "Invalido. Invalid command. See HELP for usage\n");
+        if (curCmd>=start_line){
+          fprintf(stderr, "Invalido. Invalid command. See HELP for usage\n");
+        }
         break;
 
       case CMD_HELP:
-        printf(
-          "Available commands:\n"
-          "  CREATE <event_id> <num_rows> <num_columns>\n"
-          "  RESERVE <event_id> [(<x1>,<y1>) (<x2>,<y2>) ...]\n"
-          "  SHOW <event_id>\n"
-          "  LIST\n"
-          "  WAIT <delay_ms> [thread_id]\n"  // thread_id is not implemented
-          "  BARRIER\n"                      // Not implemented
-          "  HELP\n");
-
+        if (curCmd>=start_line){
+          printf(
+            "Available commands:\n"
+            "  CREATE <event_id> <num_rows> <num_columns>\n"
+            "  RESERVE <event_id> [(<x1>,<y1>) (<x2>,<y2>) ...]\n"
+            "  SHOW <event_id>\n"
+            "  LIST\n"
+            "  WAIT <delay_ms> [thread_id]\n"  // thread_id is not implemented
+            "  BARRIER\n"                      // Not implemented
+            "  HELP\n");
+        }
         break;
 
       case CMD_BARRIER:
-        int *barrier_state = malloc(sizeof(int));
-          *barrier_state = BARRIER_ON;  // Set your result value
-        pthread_exit(barrier_state);
+        if (curCmd>=start_line){
+          struct HandlerResult *state_curCmd = malloc(sizeof(struct HandlerResult));
+          state_curCmd->barrier_state = BARRIER_ON;
+          state_curCmd->curCmd = curCmd+1;
+          pthread_exit(state_curCmd);
+          free(state_curCmd);
+        }
         break;
       case CMD_EMPTY:
         break;
@@ -215,6 +230,7 @@ int main(int argc, char *argv[]) {
         char* file_path = malloc((strlen(dir_str)+ strlen(file_searcher->d_name)+2)*sizeof(char));
         strcpy(file_path, dir_str);
         strcat(file_path, file_searcher->d_name);
+
         
         int fd_in = open(file_path, O_RDONLY);
         if (fd_in < 0){
@@ -245,9 +261,10 @@ int main(int argc, char *argv[]) {
         }
 
         int barrier = BARRIER_ON;
+        int curCmd = 0;
         while (barrier == BARRIER_ON){
           barrier = BARRIER_OFF;
-          int *thread_result;
+          HandlerResult *thread_result;
           ThreadArgs *args = (ThreadArgs*) malloc(sizeof(ThreadArgs) * (size_t)max_threads); 
 
           if (args == NULL) {
@@ -261,6 +278,7 @@ int main(int argc, char *argv[]) {
             args[num_threads].file_name = file_path;
             args[num_threads].total_threads = max_threads;
             args[num_threads].fd_out = fd_out;
+            args[num_threads].start_line = curCmd;
             if (pthread_create(&tids[num_threads],NULL, handle_commands, (void *)&args[num_threads]) != 0){
               fprintf(stderr, "error creating thread.\n");
               continue;
@@ -269,21 +287,17 @@ int main(int argc, char *argv[]) {
           //wait for all threads
           for (int i = 0; i < max_threads; ++i) {
             pthread_join(tids[i], (void **)&thread_result);
-            if (thread_result != NULL){
-              int thread_state = *thread_result;
-              if (thread_state == BARRIER_ON){
-                barrier = thread_state;
+            if (thread_result != NULL) {
+              int barrier_state = thread_result->barrier_state;
+              if (barrier_state == BARRIER_ON) {
+                barrier = thread_result->barrier_state;
+                curCmd = thread_result->curCmd;
               }
             }
+            free(thread_result);
           }
-          if (barrier ==1){
-            printf("encontrou barrier\n");
-          }
-          //free all the structs
-          //printf("All Threads terminated, ready to continue.\n");
-          //to resume the thread, temos de recomeçar a partir do barrier q as fez parar
+          if (barrier ==1)
           free(args);
-          free(thread_result);
         }
         
         free(file_out_path);
@@ -292,7 +306,6 @@ int main(int argc, char *argv[]) {
 
         close(fd_in);
         close(fd_out);
-
         exit(0);
       } else {
         // Parent process

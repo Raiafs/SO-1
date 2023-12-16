@@ -193,22 +193,22 @@ int ems_reserve(unsigned int event_id, size_t num_seats, size_t* xs, size_t* ys)
     pthread_mutex_lock(get_lock_with_delay(event, seat_index(event, row, col)));
     if (row <= 0 || row > event->rows || col <= 0 || col > event->cols) {
       fprintf(stderr, "Invalid seat\n");
-      for (j = 0; j < e; j++) {
+      for (j = 0; j <= e; j++) {
         pthread_mutex_unlock(get_lock_with_delay(event, seat_index(event, xs[j], ys[j])));
       }
-      break;
+      return 1;
     }
     if (*get_seat_with_delay(event, seat_index(event, row, col)) != 0) {
       fprintf(stderr, "Seat already reserved\n");
-      for (j = 0; j < e; j++) {
+      for (j = 0; j <= e; j++) {
         pthread_mutex_unlock(get_lock_with_delay(event, seat_index(event, xs[j], ys[j])));
       }
-      break;
+      return 1;
     }
   }
   if (e < num_seats) {
     event->reservations--;
-    for (j = 0; j < e; j++) {
+    for (j = 0; j <= e; j++) {
       pthread_mutex_unlock(get_lock_with_delay(event, seat_index(event, xs[j], ys[j])));
     }
     return 1;
@@ -227,7 +227,7 @@ int ems_reserve(unsigned int event_id, size_t num_seats, size_t* xs, size_t* ys)
     for (j = 0; j < i; j++) {
       *get_seat_with_delay(event, seat_index(event, xs[j], ys[j])) = 0;
     }
-    for (j = 0; j < e; j++) {
+    for (j = 0; j <= e; j++) {
       pthread_mutex_unlock(get_lock_with_delay(event, seat_index(event, xs[j], ys[j])));
     }
     return 1;
@@ -255,15 +255,12 @@ int ems_show(unsigned int event_id, int fd_out) {
     return 1;
   }
 
-
   size_t x =1;
-  for(; x<event->cols; x++){
+  for(; x<=event->cols; x++){
     size_t y =1;
-    for(; y<event->rows; y++)
+    for(; y<=event->rows; y++)
     pthread_mutex_lock(get_lock_with_delay(event, seat_index(event, x, y)));
   }
-  printf("entered show.\n");
-
   for (size_t i = 1; i <= event->rows; i++) {
     for (size_t j = 1; j <= event->cols; j++) {
       unsigned int* seat = get_seat_with_delay(event, seat_index(event, i, j));
@@ -272,9 +269,9 @@ int ems_show(unsigned int event_id, int fd_out) {
 
       if (str == NULL) {
         fprintf(stderr, "Memory allocation error\n");
-        for(x=1; x<event->cols; x++){
+        for(x=1; x<=event->cols; x++){
           size_t y =1;
-          for(; y<event->rows; y++)
+          for(; y<=event->rows; y++)
             pthread_mutex_unlock(get_lock_with_delay(event, seat_index(event, x, y)));
         }
         return 1;
@@ -289,9 +286,9 @@ int ems_show(unsigned int event_id, int fd_out) {
 
         if (bytes_written < 0){
           fprintf(stderr, "write error: %s\n", strerror(errno));
-          for(x=1; x<event->cols; x++){
+          for(x=1; x<=event->cols; x++){
            size_t y =1;
-            for(; y<event->rows; y++)
+            for(; y<=event->rows; y++)
               pthread_mutex_unlock(get_lock_with_delay(event, seat_index(event, x, y)));
           }
           return -1;
@@ -311,9 +308,9 @@ int ems_show(unsigned int event_id, int fd_out) {
 
           if (bytes_written < 0){
             fprintf(stderr, "write error: %s\n", strerror(errno));
-            for(x=1; x<event->cols; x++){
+            for(x=1; x<=event->cols; x++){
               size_t y =1;
-              for(; y<event->rows; y++)
+              for(; y<=event->rows; y++)
                 pthread_mutex_unlock(get_lock_with_delay(event, seat_index(event, x, y)));
             }
             return -1;
@@ -335,9 +332,9 @@ int ems_show(unsigned int event_id, int fd_out) {
 
       if (bytes_written < 0){
         fprintf(stderr, "write error: %s\n", strerror(errno));
-        for(x=1; x<event->cols; x++){
+        for(x=1; x<=event->cols; x++){
           size_t y =1;
-          for(; y<event->rows; y++)
+          for(; y<=event->rows; y++)
             pthread_mutex_unlock(get_lock_with_delay(event, seat_index(event, x, y)));
         }
         return -1;
@@ -348,9 +345,9 @@ int ems_show(unsigned int event_id, int fd_out) {
       done += (int) bytes_written;
     }
   }
-  for(x=1; x<event->cols; x++){
+  for(x=1; x<=event->cols; x++){
     size_t y =1;
-      for(; y<event->rows; y++)
+      for(; y<=event->rows; y++)
         pthread_mutex_unlock(get_lock_with_delay(event, seat_index(event, x, y)));
   }
   return 0;
